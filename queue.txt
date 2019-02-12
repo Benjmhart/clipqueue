@@ -1,0 +1,23 @@
+handlePaste :: [String] -> IO ()
+handlePaste queue = do
+  let newQueue = tailSafe queue
+  putStrLn . unlines $ newQueue
+  written <- writeFile "./queue.txt" (unlines newQueue)
+  evaluate (force written)
+  case listToMaybe newQueue of
+    Nothing -> return ()
+    Just a  -> setClipboard a
+
+handleCut :: [String] -> IO ()
+handleCut  queue = do
+  newItem <- getClipboard
+  putStrLn $ "new item from clipBoard: " ++ newItem
+  let newQueue = queue ++ [newItem]
+  setClipboard $ head newQueue
+  putStrLn $ "reset head of CB to: " ++ (head newQueue)
+  written <- writeFile "./queue.txt" (unlines newQueue)
+  evaluate (force written)
+  return ()
+data CBEvent = PasteEvent | CopyEvent | CutEvent deriving(Eq, Read, Show)
+d contents, and also th
+window 
