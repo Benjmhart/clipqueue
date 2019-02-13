@@ -8,6 +8,7 @@ import System.Hclip
 
 import Data.List(sort)
 import Data.List.NonEmpty(NonEmpty(..))
+import Data.Maybe(fromJust)
 import qualified Data.List.NonEmpty as NE
 import Cursor.Simple.List.NonEmpty
 import Control.Monad(liftM)
@@ -32,7 +33,7 @@ tui = do
     
 
 data TuiState =
-    TuiState { tuiStateQueue :: NonEmptyCursor FilePath}
+    TuiState { tuiStateQueue :: NonEmptyCursor String}
     deriving (Show, Eq)
 
 type ResourceName = String
@@ -60,21 +61,31 @@ drawTui ts =
   let nec = tuiStateQueue ts
   in [border $ vBox $ 
      concat
-          [ map (drawPath False) $ reverse $ nonEmptyCursorPrev nec
-          , [ drawPath True $ nonEmptyCursorCurrent nec ]
-          , map (drawPath False) $ nonEmptyCursorNext nec ]]
+          [ map (drawItem False) $ reverse $ nonEmptyCursorPrev nec
+          , [ drawItem True $ nonEmptyCursorCurrent nec ]
+          , map (drawItem False) $ nonEmptyCursorNext nec ]]
 
-drawPath :: Bool -> FilePath -> Widget n
-drawPath b 
-  | b == True = withAttr "selected" . str
-  | otherwise = str
+drawItem :: Bool -> String -> Widget n
+drawItem isSelected 
+  | isSelected == True = withAttr "selected" . str . prePrep
+  | otherwise          = str . prePrep
+  where prePrep        = addEllipses . take 18
+        addEllipses xs
+          | length xs >= 18 = xs ++ "..."
+          | otherwise     = xs
 
 handleTuiEvent :: TuiState -> BrickEvent n e -> EventM n (Next TuiState)
-handleTuiEvent s e =
+handleTuiEvent s e = 
     case e of
         VtyEvent vtye ->
             case vtye of
                 EvKey (KChar 'q') [] -> halt s
+                EvKey (KChar 'u') [] -> do
+                  newQ <- liftIO $ readFile $ "../queue.txt"
+                  liftIO $ evaluate (force newQ)
+                  case NE.nonEmpty . lines $ newQ of
+                    Nothing -> continue $ s { tuiStateQueue = makeNonEmptyCursor ( fromJust . NE.nonEmpty $ [""])}
+                    Just ne -> continue $ s { tuiStateQueue = makeNonEmptyCursor ne}
                 EvKey KDown [] -> do
                   let nec = tuiStateQueue s
                   case nonEmptyCursorSelectNext nec of
