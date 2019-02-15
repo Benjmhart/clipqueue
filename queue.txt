@@ -1,12 +1,12 @@
-d contents, and also th
-window 
-rl+spac
-    Just a  -> setClipboard a
-  return ()
-case NE.nonEmpty . lines $ queue of
-lection = n
-Queue s
-                  case nonEmptyCursorSelectNext 
-inue $ s
-lipboa
- 
+
+first
+second 
+
+fourth
+fourth
+fourth
+
+
+fourth
+
+third 

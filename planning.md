@@ -1,5 +1,11 @@
 1. currently does not support multi-line clips, build a special delimiter system?
 
+   - images?
+
+   - bug where whitespace gets inserted into file
+
+   - bug where clipping isn't linear
+
 2. currently the two processes need to be run seperately, combine them with haskell
 
 3. publish a haskell wrapper/port for the node library?
@@ -13,3 +19,5 @@
 7. refactor JS stack to purescript
 
 8. does it look in current folder or does it always use the project folder queue.txt file?
+
+- move data store to a database? (postgres, redis)?
