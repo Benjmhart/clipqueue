@@ -69,10 +69,15 @@ drawItem :: Bool -> String -> Widget n
 drawItem isSelected 
   | isSelected == True = withAttr "selected" . str . prePrep
   | otherwise          = str . prePrep
-  where prePrep        = addEllipses . take 18
+  where prePrep        = addEllipses . take 18 . filter isntWhite
         addEllipses xs
           | length xs >= 18 = xs ++ "..."
           | otherwise     = xs
+
+isntWhite :: Char -> Bool
+isntWhite ' ' = False
+isntWhite 'Ω' = False
+isntWhite x   = True
 
 handleTuiEvent :: TuiState -> BrickEvent n e -> EventM n (Next TuiState)
 handleTuiEvent s e = 
