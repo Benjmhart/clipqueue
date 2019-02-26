@@ -89,30 +89,29 @@ handleTuiEvent s e =
                 EvKey KDown [] -> do
                   let nec = tuiStateQueue s
                   case nonEmptyCursorSelectNext nec of
-                    Nothing -> continue s
+                    Nothing -> do
+                      liftIO . setClipboard . safeDecode . nonEmptyCursorCurrent $ nec
+                      continue s
                     Just nec' -> do
                       liftIO . setClipboard . safeDecode . nonEmptyCursorCurrent $ nec'
                       continue $ s { tuiStateQueue = nec' }
                 EvKey KUp [] -> do
                   let nec = tuiStateQueue s
                   case nonEmptyCursorSelectPrev nec of
-                    Nothing -> continue s
+                    Nothing ->  do
+                      liftIO . setClipboard . safeDecode . nonEmptyCursorCurrent $ nec
+                      continue s
                     Just nec' -> do
                       liftIO . setClipboard . safeDecode . nonEmptyCursorCurrent $ nec'
                       continue $ s { tuiStateQueue = nec' }
-                -- EvKey KEnter [] -> do
-                --   let selection = nonEmptyCursorCurrent $ tuiStateQueue s
-                --   continue s
-                --   case isDir of
-                --     False -> continue s
-                --     True -> do
-                --       liftIO $ setCurrentDirectory selection
-                --       s' <- liftIO buildInitialState
-                --       continue s'
+                EvKey KEnter [] -> do
+                    let nec =  tuiStateQueue s
+                    liftIO . setClipboard . safeDecode . nonEmptyCursorCurrent $ nec
+                    continue s
                 _ -> continue s
         _ -> continue s
 
 safeDecode :: String -> String
 safeDecode []       = []
-safeDecode ('\n':xs) = ('\n':safeDecode xs)
+safeDecode ('Ω':xs) = ('\n':safeDecode xs)
 safeDecode (x:xs)   = ( x  :safeDecode xs)
