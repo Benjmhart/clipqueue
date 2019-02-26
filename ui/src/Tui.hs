@@ -91,14 +91,14 @@ handleTuiEvent s e =
                   case nonEmptyCursorSelectNext nec of
                     Nothing -> continue s
                     Just nec' -> do
-                      liftIO . setClipboard . nonEmptyCursorCurrent $ nec'
+                      liftIO . setClipboard . safeDecode . nonEmptyCursorCurrent $ nec'
                       continue $ s { tuiStateQueue = nec' }
                 EvKey KUp [] -> do
                   let nec = tuiStateQueue s
                   case nonEmptyCursorSelectPrev nec of
                     Nothing -> continue s
                     Just nec' -> do
-                      liftIO . setClipboard . nonEmptyCursorCurrent $ nec'
+                      liftIO . setClipboard . safeDecode . nonEmptyCursorCurrent $ nec'
                       continue $ s { tuiStateQueue = nec' }
                 -- EvKey KEnter [] -> do
                 --   let selection = nonEmptyCursorCurrent $ tuiStateQueue s
@@ -111,3 +111,8 @@ handleTuiEvent s e =
                 --       continue s'
                 _ -> continue s
         _ -> continue s
+
+safeDecode :: String -> String
+safeDecode []       = []
+safeDecode ('\n':xs) = ('\n':safeDecode xs)
+safeDecode (x:xs)   = ( x  :safeDecode xs)
