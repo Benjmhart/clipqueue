@@ -5,3 +5,4 @@ extra-deps:
   - cursor-0.0.0.1
   - validity-0.8.0.0
   - Hclip-3.0.0.4@sha256:df341c936594465df25c3b9f93f6ebe3110a36d64a51dbbd1dbd557394bbdba4
+  - http-listen-0.1.0.0@sha256:968de91e5c6c468a62f8f5bff6b465dea5fcd0d33b024dc81df1a9cea9beb2ef
