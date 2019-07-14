@@ -35,10 +35,12 @@ executables:
       - -with-rtsopts=-N
     dependencies:
       - clipqueue
+      - classy-prelude
       - Hclip
       - safe
       - deepseq
       - scotty
+      - text
 
 tests:
   clipqueue-test:

@@ -1,7 +1,10 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE NoImplicitPrelude #-}
 
 module Tui where
 
+import           ClassyPrelude
+import qualified Data.Text                     as T
 import           System.Exit
 
 import           System.Hclip
@@ -27,7 +30,6 @@ import           Graphics.Vty
 import           Graphics.Vty.Attributes
 import           Graphics.Vty.Input.Events
 import           Control.DeepSeq
-import           Control.Exception
 import           Network.HTTP.Listen
 
 emit :: CustomEvent -> BChan CustomEvent -> IO ()
@@ -46,20 +48,24 @@ tui = do
   initialVty <- buildVty
   forkIO $ run 55999 $ listen $ emit CutEvent eventChan
   forkIO $ run 55998 $ listen $ emit PasteEvent eventChan
-  endState <- customMain buildVty (Just eventChan) tuiApp initialState
+  endState <- customMain initialVty
+                         buildVty
+                         (Just eventChan)
+                         tuiApp
+                         initialState
   print endState
   return ()
 
 
 data TuiState =
-    TuiState { tuiStateQueue :: NonEmptyCursor String}
+    TuiState { tuiStateQueue :: NonEmptyCursor Text}
     deriving (Show, Eq)
 
 data CustomEvent = CutEvent | PasteEvent
   deriving(Show, Eq)
 
 
-type ResourceName = String
+type ResourceName = Text
 
 tuiApp :: App TuiState CustomEvent ResourceName
 tuiApp = App { appDraw         = drawTui
@@ -71,7 +77,7 @@ tuiApp = App { appDraw         = drawTui
 
 buildInitialState :: IO TuiState
 buildInitialState = do
-  queue <- readFile $ "../queue.txt"
+  queue <- readFileUtf8 $ "../queue.txt"
   evaluate (force queue)
   case NE.nonEmpty . lines $ queue of
     Nothing -> die "there are no contents"
@@ -81,9 +87,9 @@ drawTui :: TuiState -> [Widget ResourceName]
 drawTui ts =
   let nec = tuiStateQueue ts
   in  [ border $ vBox $ concat
-          [ map (drawItem False) $ reverse $ nonEmptyCursorPrev nec
-          , [drawItem True $ nonEmptyCursorCurrent nec]
-          , map (drawItem False) $ nonEmptyCursorNext nec
+          [ map (drawItem False . T.unpack) $ reverse $ nonEmptyCursorPrev nec
+          , [drawItem True . T.unpack $ nonEmptyCursorCurrent nec]
+          , map (drawItem False . T.unpack) $ nonEmptyCursorNext nec
           ]
       ]
 
@@ -106,7 +112,7 @@ handleTuiEvent s e = case e of
   VtyEvent vtye -> case vtye of
     EvKey (KChar 'q') [] -> halt s
     EvKey (KChar 'u') [] -> do
-      newQ <- liftIO $ readFile $ "../queue.txt"
+      newQ <- liftIO $ readFileUtf8 $ "../queue.txt"
       liftIO $ evaluate (force newQ)
       case NE.nonEmpty . lines $ newQ of
         Nothing -> continue $ s
@@ -149,7 +155,8 @@ handleTuiEvent s e = case e of
   _ -> continue s
 
 
-safeDecode :: String -> String
-safeDecode []         = []
-safeDecode ('Ω' : xs) = ('\n' : safeDecode xs)
-safeDecode (x   : xs) = (x : safeDecode xs)
+safeDecode :: Text -> String
+safeDecode = T.unpack . T.map toNewLine
+ where
+  toNewLine 'Ω' = '\n'
+  toNewLine a   = a

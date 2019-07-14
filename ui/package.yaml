@@ -12,6 +12,12 @@ library:
     - directory
     - cursor
     - http-listen
+    - safe
+    - bytestring
+    - text
+    - classy-prelude
+    - Hclip
+    - deepseq
 
 executables:
   tui:
