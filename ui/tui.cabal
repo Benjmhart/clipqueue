@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 9e2ef50f608e4db919970c30bbaca9f1087463664748f49e79d949e92b4f0cde
+-- hash: 2bdb8177a016ce4789e0cb7847377d32195d363004344f59b09ec1a5dcac7faf
 
 name:           tui
 version:        0.0.0.0
@@ -37,6 +37,7 @@ library
     , http-listen
     , safe
     , text
+    , unliftio
     , vty
   default-language: Haskell2010
 

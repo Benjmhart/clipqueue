@@ -18,7 +18,6 @@ import           Cursor.Simple.List.NonEmpty
 import           Control.Monad                  ( liftM )
 import           Control.Monad.IO.Class
 import           Control.Concurrent             ( forkIO )
-import           Safe                           ( readMay )
 import           Brick.AttrMap
 import           Brick.BChan
 import           Brick.Main
@@ -42,9 +41,14 @@ listen effect _ = do
 
 tui :: IO ()
 tui = do
-  initialState <- buildInitialState
+  args <- getArgs
+  let 
+    mode = (readMay =<< listToMaybe args :: Maybe CQMode)
+    savePath = (T.unpack <$> afterHead args :: Maybe FilePath)
+  initialState <- buildInitialState mode savePath
   eventChan    <- newBChan 10
-  let buildVty = mkVty defaultConfig
+  let 
+    buildVty = mkVty defaultConfig
   initialVty <- buildVty
   forkIO $ run 55999 $ listen $ emit CutEvent eventChan
   forkIO $ run 55998 $ listen $ emit PasteEvent eventChan
@@ -56,9 +60,13 @@ tui = do
   print endState
   return ()
 
+data CQMode = Normal | Static | Queue | Advance
+  deriving (Show, Read, Eq)
 
 data TuiState =
-    TuiState { tuiStateQueue :: NonEmptyCursor Text}
+    TuiState { tuiStateQueue :: NonEmptyCursor Text
+             , mode :: CQMode
+             , savePath :: Maybe FilePath}
     deriving (Show, Eq)
 
 data CustomEvent = CutEvent | PasteEvent
@@ -75,13 +83,23 @@ tuiApp = App { appDraw         = drawTui
              , appAttrMap      = const $ attrMap mempty [("selected", fg red)]
              }
 
-buildInitialState :: IO TuiState
-buildInitialState = do
+buildInitialState :: Maybe CQMode -> Maybe FilePath -> IO TuiState
+buildInitialState mode path = do
   queue <- readFileUtf8 $ "../queue.txt"
   evaluate (force queue)
+  let 
+    setMode = case mode of
+      Just Static  -> Static
+      Just Queue   -> Queue
+      Just Advance -> Advance
+      _            -> Normal
   case NE.nonEmpty . lines $ queue of
     Nothing -> die "there are no contents"
-    Just ne -> pure TuiState { tuiStateQueue = makeNonEmptyCursor ne }
+    Just ne -> pure TuiState 
+                { tuiStateQueue = makeNonEmptyCursor ne 
+                , mode = setMode
+                , savePath = path
+                }
 
 drawTui :: TuiState -> [Widget ResourceName]
 drawTui ts =
@@ -160,3 +178,8 @@ safeDecode = T.unpack . T.map toNewLine
  where
   toNewLine 'Ω' = '\n'
   toNewLine a   = a
+
+afterHead :: [a] -> Maybe a
+afterhead []      = Nothing
+afterhead (_:[])  = Nothing
+afterHead (_:a:_) = Just a

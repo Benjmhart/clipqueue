@@ -18,6 +18,7 @@ library:
     - classy-prelude
     - Hclip
     - deepseq
+    - unliftio
 
 executables:
   tui:
