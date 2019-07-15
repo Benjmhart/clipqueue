@@ -19,6 +19,7 @@ library:
     - Hclip
     - deepseq
     - unliftio
+    - silently
 
 executables:
   tui:

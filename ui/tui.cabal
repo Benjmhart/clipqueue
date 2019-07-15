@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 2bdb8177a016ce4789e0cb7847377d32195d363004344f59b09ec1a5dcac7faf
+-- hash: 263766d7ad583229ae87bf3c1472b31d2651be2f074026c5f9edb9fe14131f02
 
 name:           tui
 version:        0.0.0.0
@@ -20,6 +20,7 @@ source-repository head
 
 library
   exposed-modules:
+      ClipQueueModule
       Tui
   other-modules:
       Paths_tui
@@ -36,6 +37,7 @@ library
     , directory
     , http-listen
     , safe
+    , silently
     , text
     , unliftio
     , vty
