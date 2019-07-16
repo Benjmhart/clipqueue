@@ -34,6 +34,7 @@ import           Network.HTTP.Listen
 import           ClipQueueModule
 import           UnliftIO.Process (spawnCommand)
 import           System.IO.Silently (silence)
+import qualified System.Process.Typed as PT
 
 tui :: IO ()
 tui = do
@@ -46,8 +47,8 @@ tui = do
         die ""
   when (mode /= Just Static) $ do
         void . forkIO $ do
-          _ <- silence . void . spawnCommand $ "( cd ../server ; stack run )"
-          _ <- silence . void . spawnCommand $ "( cd ../keyListener ; npm start )"
+          _ <- silence . void $ PT.withProcessTerm (PT.shell $ "( cd ../keyListener ; npm start )") (\proc -> PT.stopProcess proc)
+          _ <- silence . void $ PT.withProcessTerm (PT.shell $ "( cd ../keyListener ; npm start )") (\proc -> PT.stopProcess proc)
           return ()
   initialState <- buildInitialState mode savePath
   eventChan    <- newBChan 10

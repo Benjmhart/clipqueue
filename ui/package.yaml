@@ -20,6 +20,7 @@ library:
     - deepseq
     - unliftio
     - silently
+    - typed-process >= 0.2.6.0
 
 executables:
   tui:
