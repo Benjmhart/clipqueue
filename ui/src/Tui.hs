@@ -35,20 +35,20 @@ import           ClipQueueModule
 import           UnliftIO.Process (spawnCommand)
 import           System.IO.Silently (silence)
 import qualified System.Process.Typed as PT
+import           System.Directory               (getHomeDirectory)
+import           System.FilePath                ((</>))
 
 tui :: IO ()
 tui = do
   args <- getArgs
-  let 
-    mode = (parseMode =<< listToMaybe args :: Maybe CQMode)
-    savePath = (T.unpack <$> afterHead args :: Maybe FilePath)
-  when (mode == Just Help) $ do
-        putStrLn helpText
-        die ""
-  when (mode /= Just Static) $ do
+  mode <- maybe (pure Normal) (pure . parseMode) (listToMaybe args) 
+  savePath <- maybe (map (</> "queue.txt") getHomeDirectory) (pure . T.unpack) (afterHead args)
+  showHelpText mode
+  -- TODO: use unless
+  unless (mode == Static) $ do
         void . forkIO $ do
-          _ <- silence . void $ PT.withProcessTerm (PT.shell $ "( cd ../keyListener ; npm start )") (\proc -> PT.stopProcess proc)
-          _ <- silence . void $ PT.withProcessTerm (PT.shell $ "( cd ../keyListener ; npm start )") (\proc -> PT.stopProcess proc)
+          _ <- silence . void $ PT.withProcessTerm (PT.shell $ "( cd ../keyListener ; npm start )") PT.stopProcess
+          _ <- silence . void $ PT.withProcessTerm (PT.shell $ "( cd ../keyListener ; npm start )") PT.stopProcess
           return ()
   initialState <- buildInitialState mode savePath
   eventChan    <- newBChan 10
@@ -64,18 +64,6 @@ tui = do
                          initialState
   print endState
   return ()
-
-helpText ::Text
-helpText = T.unlines
-  [ "ClipQueue Help"
-  , "clipqueue [mode [filename] ]"
-  , "Modes:"
-  , "n | normal  - Default behaviour if no mode is specified. New clipboard actions triggered by keyboard shortcuts will automatically be recorded and added to the queue. New clipboard items will be set as the current clipboard item."
-  , "s | static  - Static mode does not monitor new clipboard activity, however you can set the current clipboard item"
-  , "q | queue   - Queue mode treats your stored clipboard as a queue, you will only paste from the top, and only cut or copy items to the bottom. When you paste, the topmost item will be removed and your clipboard selection will be moved to the next item"
-  , "a | advance - Advance Mode does not remove selections, but is similar to Queue mode in that when you paste, your selection will advance automatically"
-  , "the filename argument is used to choose an alternative filepath to use for the queue.  the default is ~/queue.txt"
-  ]
 
 type ResourceName = Text
 
@@ -101,10 +89,13 @@ drawItem :: Bool -> String -> Widget n
 drawItem isSelected | isSelected == True = withAttr "selected" . str . prePrep
                     | otherwise          = str . prePrep
  where
+ --TODO: remove magic number
   prePrep = addEllipses . take 18 . filter isntWhite
   addEllipses xs | length xs >= 18 = xs ++ "..."
                  | otherwise       = xs
 
+
+-- TODO: break this function up into smaller functions for each case and remove duplication
 handleTuiEvent
   :: TuiState -> BrickEvent n CustomEvent -> EventM n (Next TuiState)
 handleTuiEvent s e = case e of
@@ -119,6 +110,7 @@ handleTuiEvent s e = case e of
       liftIO $ evaluate (force newQ)
       case NE.nonEmpty . lines $ newQ of
         Nothing -> continue $ s
+        -- use  (:|) to safely operate on the nonempty
           { tuiStateQueue = makeNonEmptyCursor $ fromJust . NE.nonEmpty $ [""]
           }
         Just ne -> continue $ s { tuiStateQueue = makeNonEmptyCursor ne }

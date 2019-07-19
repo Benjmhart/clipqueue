@@ -10,6 +10,7 @@ library:
     - brick
     - vty
     - directory
+    - filepath
     - cursor
     - http-listen
     - safe

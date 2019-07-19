@@ -41,6 +41,8 @@ executables:
       - deepseq
       - scotty
       - text
+      - directory
+      - filepath
 
 tests:
   clipqueue-test:

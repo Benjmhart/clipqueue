@@ -38,11 +38,29 @@ data CQMode = Normal | Static | Queue | Advance | Help
 data TuiState =
   TuiState { tuiStateQueue :: NonEmptyCursor Text
             , mode :: CQMode
-            , savePath :: Maybe FilePath}
+            , savePath :: FilePath}
   deriving (Show, Eq)
 
 data CustomEvent = CutEvent | PasteEvent
   deriving(Show, Eq)
+
+
+showHelpText :: CQMode -> IO ()
+showHelpText mode = when (mode == Help) $ do
+  putStrLn helpText
+  die ""
+
+helpText ::Text
+helpText = T.unlines
+  [ "ClipQueue Help"
+  , "clipqueue [mode [filename] ]"
+  , "Modes:"
+  , "n | normal  - Default behaviour if no mode is specified. New clipboard actions triggered by keyboard shortcuts will automatically be recorded and added to the queue. New clipboard items will be set as the current clipboard item."
+  , "s | static  - Static mode does not monitor new clipboard activity, however you can set the current clipboard item"
+  , "q | queue   - Queue mode treats your stored clipboard as a queue, you will only paste from the top, and only cut or copy items to the bottom. When you paste, the topmost item will be removed and your clipboard selection will be moved to the next item"
+  , "a | advance - Advance Mode does not remove selections, but is similar to Queue mode in that when you paste, your selection will advance automatically"
+  , "the filename argument is used to choose an alternative filepath to use for the queue.  the default is ~/queue.txt"
+  ]
 
 emit :: CustomEvent -> BChan CustomEvent -> IO ()
 emit e chan = writeBChan chan $ e
@@ -52,35 +70,30 @@ listen effect _ = do
   effect
   return Nothing
 
-buildInitialState :: Maybe CQMode -> Maybe FilePath -> IO TuiState
+buildInitialState :: CQMode -> FilePath -> IO TuiState
 buildInitialState mode path = do
   queue <- readFileUtf8 $ "../queue.txt"
   evaluate (force queue)
   let 
-    setMode = case mode of
-      Just Static  -> Static
-      Just Queue   -> Queue
-      Just Advance -> Advance
-      _            -> Normal
   case NE.nonEmpty . lines $ queue of
     Nothing -> die "there are no contents"
     Just ne -> pure TuiState 
                 { tuiStateQueue = makeNonEmptyCursor ne 
-                , mode = setMode
+                , mode = mode
                 , savePath = path
                 }
 
-parseMode :: Text -> Maybe CQMode
+parseMode :: Text -> CQMode
 parseMode s = case ((T.filter (== '-')) . (T.map CH.toLower) $ s) of
-                "normal"  -> Just Normal
-                "static"  -> Just Static
-                "queue"   -> Just Queue
-                "advance" -> Just Advance
-                "n"       -> Just Normal
-                "s"       -> Just Static
-                "q"       -> Just Queue
-                "a"       -> Just Advance
-                _         -> Nothing
+                "normal"  -> Normal
+                "static"  -> Static
+                "queue"   -> Queue
+                "advance" -> Advance
+                "n"       -> Normal
+                "s"       -> Static
+                "q"       -> Queue
+                "a"       -> Advance
+                _         -> Normal
 
 isntWhite :: Char -> Bool
 isntWhite ' ' = False
