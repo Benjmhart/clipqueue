@@ -33,12 +33,12 @@ import           Graphics.Vty.Attributes
 import           Graphics.Vty.Input.Events
 import           Network.HTTP.Listen
 import           ClipQueueModule
-import           UnliftIO.Process (spawnCommand)
+import           UnliftIO.Process (spawnCommand, terminateProcess)
 import           System.IO.Silently (silence)
 import qualified System.Process.Typed as PT
 import           System.Directory               (getHomeDirectory)
 import           System.FilePath                ((</>))
-import           System.Process  (callCommand)
+import           System.Process  (callCommand, getPid)
 
 -- TODO: bracket pattern the port listeners so they are properly terminated
 
@@ -46,13 +46,14 @@ keyListenerPath = "../keyListener/index-linux"
 
 serverpath = "../server/.stack-work/install/x86_64-linux/22f59208659c2b21df413d405cf120d153179962611781955bee5a73e109b287/8.6.5/bin/clipqueue-exe "
 
+
 tui :: IO ()
 tui = do
   args <- getArgs
   mode <- maybe (pure Normal) (pure . parseMode) (listToMaybe args) 
   savePath <- maybe (map (</> "queue.txt") getHomeDirectory) (pure . T.unpack) (afterHead args)
   showHelpText mode
-  keyListenerProc <- silence $ PT.startProcess (PT.shell $ keyListenerPath) 
+  keyListenerProc <- silence $ spawnCommand (keyListenerPath) 
   initialState <- buildInitialState mode savePath
   eventChan    <- newBChan 10
   cutThread <- forkIO $ run 55999 $ listen $ emit CutEvent eventChan
@@ -67,8 +68,6 @@ tui = do
                          (Just eventChan)
                          tuiApp
                          initialState
-  PT.stopProcess keyListenerProc
-  print "stopProcess called!"
   killThread cutThread
   killThread pasteThread
   callCommand "killall index-linux"
