@@ -6,21 +6,25 @@ iohook.on('keydown', async e => {
   if (e.ctrlKey && !e.shiftKey && !e.metaKey && !e.altKey) {
     switch (e.keycode) {
       case 47:
-        fetch(`http://localhost:44499/PasteEvent`).catch(err => console.log(err.message));
-        fetch('http://localhost:55998', { method: 'post' }).catch(err => console.log(err.message));
-        return console.log('PasteEvent');
-      case 46:
-        fetch(`http://localhost:44499/CopyEvent`).catch(err => console.log(err.message));
-        fetch('http://localhost:55999', { method: 'post' }).catch(err => console.log(err.message));
-        return console.log('copyEvent');
+        return sendEvent('PasteEvent');
+      case 46: // copy, but cut behaviour is the same
+        return sendEvent('CutEvent');
       case 45:
-        fetch(`http://localhost:44499/CutEvent`).catch(err => console.log(err.message));
-        fetch('http://localhost:55999', { method: 'post' }).catch(err => console.log(err.message));
-        return console.log('cutEvent');
+        return sendEvent('CutEvent');
       default:
         return; //console.log('not handled', e.keycode);
     }
   }
 });
+
+const evPorts = {
+  PasteEvent: '55998',
+  CutEvent: '55999'
+};
+
+const sendEvent = evStr => {
+  fetch('http://localhost:' + evPorts[evStr], { method: 'post' }).catch(err => console.log(err.message));
+  return console.log(evStr);
+};
 
 iohook.start();

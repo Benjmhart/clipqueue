@@ -50,7 +50,8 @@ handleCut :: MonadIO m => [Text] -> FilePath -> m ()
 handleCut queue path = liftIO $ do
   newItem' <- getClipboard
   let newItem = safeEncode . T.pack $ newItem'
-  unless (null newItem) do
+  liftIO $ putStrLn $ "new Item! " <> newItem
+  unless (null newItem) $ do
     putStrLn $ ("new item from clipBoard: " <> newItem :: Text)
     let newQueue = queue ++ [newItem]
     written <- writeFileUtf8 path (T.unlines newQueue)

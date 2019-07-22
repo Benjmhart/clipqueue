@@ -18,7 +18,7 @@ import qualified Data.List.NonEmpty            as NE
 import           Cursor.Simple.List.NonEmpty
 import           Control.Monad                  ( liftM )
 import           Control.Monad.IO.Class
-import           Control.Concurrent             ( forkIO )
+import           Control.Concurrent             ( forkIO, killThread )
 import           Control.DeepSeq
 import           Brick.AttrMap
 import           Brick.BChan
@@ -27,6 +27,7 @@ import           Brick.Types
 import           Brick.Util
 import           Brick.Widgets.Core
 import           Brick.Widgets.Border
+import           Brick.Widgets.Center
 import           Graphics.Vty
 import           Graphics.Vty.Attributes
 import           Graphics.Vty.Input.Events
@@ -37,6 +38,13 @@ import           System.IO.Silently (silence)
 import qualified System.Process.Typed as PT
 import           System.Directory               (getHomeDirectory)
 import           System.FilePath                ((</>))
+import           System.Process  (callCommand)
+
+-- TODO: bracket pattern the port listeners so they are properly terminated
+
+keyListenerPath = "../keyListener/index-linux"
+
+serverpath = "../server/.stack-work/install/x86_64-linux/22f59208659c2b21df413d405cf120d153179962611781955bee5a73e109b287/8.6.5/bin/clipqueue-exe "
 
 tui :: IO ()
 tui = do
@@ -44,14 +52,11 @@ tui = do
   mode <- maybe (pure Normal) (pure . parseMode) (listToMaybe args) 
   savePath <- maybe (map (</> "queue.txt") getHomeDirectory) (pure . T.unpack) (afterHead args)
   showHelpText mode
-  -- TODO: use unless
-  unless (mode == Static) $ do
-        void . forkIO $ do
-          _ <- silence . void $ PT.withProcessTerm (PT.shell $ "( cd ../keyListener ; npm start )") PT.stopProcess
-          _ <- silence . void $ PT.withProcessTerm (PT.shell $ "( cd ../keyListener ; npm start )") PT.stopProcess
-          return ()
+  keyListenerProc <- silence $ PT.startProcess (PT.shell $ keyListenerPath) 
   initialState <- buildInitialState mode savePath
   eventChan    <- newBChan 10
+  cutThread <- forkIO $ run 55999 $ listen $ emit CutEvent eventChan
+  pasteThread <- forkIO $ run 55998 $ listen $ emit PasteEvent eventChan
   let 
     buildVty = mkVty defaultConfig
   initialVty <- buildVty
@@ -62,7 +67,11 @@ tui = do
                          (Just eventChan)
                          tuiApp
                          initialState
-  print endState
+  PT.stopProcess keyListenerProc
+  print "stopProcess called!"
+  killThread cutThread
+  killThread pasteThread
+  callCommand "killall index-linux"
   return ()
 
 type ResourceName = Text
@@ -78,74 +87,92 @@ tuiApp = App { appDraw         = drawTui
 drawTui :: TuiState -> [Widget ResourceName]
 drawTui ts =
   let nec = tuiStateQueue ts
-  in  [ border $ vBox $ concat
-          [ map (drawItem False . T.unpack) $ reverse $ nonEmptyCursorPrev nec
-          , [drawItem True . T.unpack $ nonEmptyCursorCurrent nec]
-          , map (drawItem False . T.unpack) $ nonEmptyCursorNext nec
-          ]
+  in  [ progInfo ts
+      , progStatus nec
       ]
 
-drawItem :: Bool -> String -> Widget n
-drawItem isSelected | isSelected == True = withAttr "selected" . str . prePrep
-                    | otherwise          = str . prePrep
- where
- --TODO: remove magic number
-  prePrep = addEllipses . take 18 . filter isntWhite
-  addEllipses xs | length xs >= 18 = xs ++ "..."
-                 | otherwise       = xs
+progInfo ts = border $ vBox
+  [ str $ "Clipqueue 0.3.0"
+  , str $  concat ["mode: ", show $ mode ts]
+  , str $ "File: " ++ savePath ts
+  ]
+
+progStatus nec= hCenter $  border $ vBox $ concat
+  [ map (drawItem None . T.unpack) $ reverse $ nonEmptyCursorPrev nec
+  , [drawItem Highlight . T.unpack $ nonEmptyCursorCurrent nec]
+  , map (drawItem None . T.unpack) $ nonEmptyCursorNext nec
+  ]
 
 
 -- TODO: break this function up into smaller functions for each case and remove duplication
 handleTuiEvent
   :: TuiState -> BrickEvent n CustomEvent -> EventM n (Next TuiState)
-handleTuiEvent s e = case e of
-  VtyEvent vtye -> case vtye of
-    EvKey (KChar 'q') [] -> do
-      --TODO compile binaries and run directly
-      _ <- spawnCommand "( killall node )" 
-      _ <- spawnCommand "( killall stack )"
-      halt s
-    EvKey (KChar 'u') [] -> do
-      newQ <- liftIO $ readFileUtf8 $ "../queue.txt"
-      liftIO $ evaluate (force newQ)
-      case NE.nonEmpty . lines $ newQ of
-        Nothing -> continue $ s
-        -- use  (:|) to safely operate on the nonempty
-          { tuiStateQueue = makeNonEmptyCursor $ fromJust . NE.nonEmpty $ [""]
-          }
-        Just ne -> continue $ s { tuiStateQueue = makeNonEmptyCursor ne }
-    EvKey KDown [] -> do
-      let nec = tuiStateQueue s
-      case nonEmptyCursorSelectNext nec of
-        Nothing -> do
-          liftIO . setClipboard . safeDecode . nonEmptyCursorCurrent $ nec
-          continue s
-        Just nec' -> do
-          liftIO . setClipboard . safeDecode . nonEmptyCursorCurrent $ nec'
-          continue $ s { tuiStateQueue = nec' }
-    EvKey KUp [] -> do
-      let nec = tuiStateQueue s
-      case nonEmptyCursorSelectPrev nec of
-        Nothing -> do
-          liftIO . setClipboard . safeDecode . nonEmptyCursorCurrent $ nec
-          continue s
-        Just nec' -> do
-          liftIO . setClipboard . safeDecode . nonEmptyCursorCurrent $ nec'
-          continue $ s { tuiStateQueue = nec' }
-    EvKey KEnter [] -> do
-      let nec = tuiStateQueue s
-      liftIO . setClipboard . safeDecode . nonEmptyCursorCurrent $ nec
-      continue s
+handleTuiEvent s e = do
+  case e of
+    VtyEvent vtye -> case vtye of
+      EvKey (KChar 'q') [] -> halt s
+      EvKey (KChar 'z') [] -> halt s
+      EvKey (KChar 'u') [] -> handleEventWith updateQueue s e
+      EvKey KDown [] -> handleEventWith (adjustClipQueueState advanceQueue) s e
+      EvKey KUp [] -> handleEventWith (adjustClipQueueState recedeQueue) s e
+      EvKey KEnter [] -> handleEventWith (adjustClipQueueState id) s e
+      _ -> continue s
+    (AppEvent (CutEvent)) -> handleEventWith getNewCut s e 
+    (AppEvent (PasteEvent)) -> handleEventWith updateQueue s e
     _ -> continue s
-  (AppEvent (CutEvent)) -> do
-    let nec       = tuiStateQueue s
-    let newCursor = makeNonEmptyCursor $ fromJust . NE.nonEmpty $ ["CUT!"]
-    let nextState = nonEmptyCursorAppendAtEnd "CUT!" nec
-    continue s { tuiStateQueue = nextState }
-  (AppEvent (PasteEvent)) -> do
-    let nec       = tuiStateQueue s
-    let newCursor = makeNonEmptyCursor $ fromJust . NE.nonEmpty $ ["PASTE!"]
-    let nextState = nonEmptyCursorAppendAtEnd "PASTE!" nec
-    continue s { tuiStateQueue = nextState }
-  _ -> continue s
 
+handleEventWith :: (TuiState -> EventM n TuiState) -> TuiState -> BrickEvent n CustomEvent -> EventM n (Next TuiState)
+handleEventWith f s e = do
+  newState <- f s 
+  continue newState
+
+advanceQueue :: NonEmptyCursor Text -> NonEmptyCursor Text    
+advanceQueue nec = maybe nec id (nonEmptyCursorSelectNext nec)
+
+recedeQueue :: NonEmptyCursor Text -> NonEmptyCursor Text
+recedeQueue nec = maybe nec id (nonEmptyCursorSelectPrev nec)
+
+adjustClipQueueState :: MonadIO m => (NonEmptyCursor Text -> NonEmptyCursor Text) -> TuiState -> m TuiState
+adjustClipQueueState f s = do
+  let 
+    nec = tuiStateQueue s
+    newnec = f nec
+  setClipboardFromNec newnec
+  setTuiState s newnec
+
+setClipboardFromNec :: MonadIO m => NonEmptyCursor Text -> m ()
+setClipboardFromNec = liftIO . setClipboard . safeDecode . nonEmptyCursorCurrent
+
+updateQueue :: MonadIO m => TuiState -> m TuiState
+updateQueue s = do
+  newQ <- getQueueFromFile s
+  liftIO $ evaluate $ force newQ
+  cursorState <- mkCursorState newQ
+  setClipboardFromNec cursorState
+  setTuiState s cursorState
+
+getNewCut :: MonadIO m => TuiState -> m TuiState
+getNewCut s = do
+  newItem' <- liftIO $ T.pack <$> getClipboard
+  let 
+    newItem = safeEncode $ newItem'
+    path = savePath s
+  if (null newItem) then return s else do
+    let 
+      newQueue = nonEmptyCursorAppendAtEnd newItem' (tuiStateQueue s)
+      textToWrite = T.unlines $ foldr (:) [] (rebuildNonEmptyCursor newQueue)
+    written <- liftIO $ writeFileUtf8 path textToWrite
+    evaluate (force written)
+    cursorState <- mkCursorState $ textToWrite
+    setClipboardFromNec cursorState
+    setTuiState s cursorState
+
+setTuiState :: Monad m => TuiState -> NonEmptyCursor Text -> m TuiState
+setTuiState s n = return $ s { tuiStateQueue = n }
+
+
+getQueueFromFile :: MonadIO m => TuiState -> m Text
+getQueueFromFile s = do 
+  tx <- liftIO . readFileUtf8 $ savePath s
+  liftIO $ evaluate $ force tx
+  return tx

@@ -4,7 +4,7 @@ cabal-version: 1.12
 --
 -- see: https://github.com/sol/hpack
 --
--- hash: 40824437248cdccf40acfe10c76dce19ffd6a78ae64587b0ed7ebc0a80ab4996
+-- hash: 90067c8976a5e5a4c3d229af61f8ef2ff18899df5e0d551b877724d0344652bd
 
 name:           tui
 version:        0.0.0.0
@@ -37,6 +37,7 @@ library
     , directory
     , filepath
     , http-listen
+    , process
     , safe
     , silently
     , text

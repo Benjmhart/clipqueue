@@ -70,29 +70,38 @@ listen effect _ = do
   effect
   return Nothing
 
+mkCursorState :: Monad m => Text -> m (NonEmptyCursor Text)
+mkCursorState = map makeNonEmptyCursor . maybe (pure $ "" :| [] )  (pure) . NE.nonEmpty . lines
+  
 buildInitialState :: CQMode -> FilePath -> IO TuiState
 buildInitialState mode path = do
-  queue <- readFileUtf8 $ "../queue.txt"
+  queue <- readFileUtf8 $ path
   evaluate (force queue)
-  let 
-  case NE.nonEmpty . lines $ queue of
-    Nothing -> die "there are no contents"
-    Just ne -> pure TuiState 
-                { tuiStateQueue = makeNonEmptyCursor ne 
-                , mode = mode
-                , savePath = path
-                }
+  cursorState <- mkCursorState queue 
+  return $ TuiState cursorState mode path
+
+data Highlight = None | Highlight
+
+drawItem :: Highlight -> String -> Widget n
+drawItem Highlight = withAttr "selected" . str . prePrep
+drawItem _         = str . prePrep
+
+prePrep = addEllipses . take maxwidth . filter isntWhite
+ where
+  maxwidth = 28
+  addEllipses xs | length xs >= maxwidth = xs ++ "..."
+                 | otherwise       = xs
+
 
 parseMode :: Text -> CQMode
-parseMode s = case ((T.filter (== '-')) . (T.map CH.toLower) $ s) of
-                "normal"  -> Normal
-                "static"  -> Static
-                "queue"   -> Queue
-                "advance" -> Advance
+parseMode s = 
+  let a = (T.map CH.toLower) . T.take 1 . (T.filter (/= '-')) $ s in
+  case a of
                 "n"       -> Normal
                 "s"       -> Static
                 "q"       -> Queue
                 "a"       -> Advance
+                "h"       -> Help
                 _         -> Normal
 
 isntWhite :: Char -> Bool
@@ -106,7 +115,15 @@ safeDecode = T.unpack . T.map toNewLine
   toNewLine 'Ω' = '\n'
   toNewLine a   = a
 
+safeEncode :: Text -> Text
+safeEncode = T.map fromNewLine
+  where
+  fromNewLine '\n' = 'Ω'
+  fromNewLine a    = a
+  
+
 afterHead :: [a] -> Maybe a
 afterhead []      = Nothing
 afterhead (_:[])  = Nothing
 afterHead (_:a:_) = Just a
+afterHead _       = Nothing
