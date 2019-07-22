@@ -38,13 +38,12 @@ import           System.IO.Silently (silence)
 import qualified System.Process.Typed as PT
 import           System.Directory               (getHomeDirectory)
 import           System.FilePath                ((</>))
-import           System.Process  (callCommand, getPid)
+import           System.Process  (callCommand, getPid, interruptProcessGroupOf)
+import System.Posix.Signals (sigKILL, signalProcess)
 
--- TODO: bracket pattern the port listeners so they are properly terminated
+-- TODO: use getExecutablePath from System.environment to run the keylistener
 
 keyListenerPath = "../keyListener/index-linux"
-
-serverpath = "../server/.stack-work/install/x86_64-linux/22f59208659c2b21df413d405cf120d153179962611781955bee5a73e109b287/8.6.5/bin/clipqueue-exe "
 
 
 tui :: IO ()
@@ -68,9 +67,9 @@ tui = do
                          (Just eventChan)
                          tuiApp
                          initialState
+  interruptProcessGroupOf keyListenerProc
   killThread cutThread
   killThread pasteThread
-  callCommand "killall index-linux"
   return ()
 
 type ResourceName = Text

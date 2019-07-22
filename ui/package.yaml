@@ -23,6 +23,7 @@ library:
     - silently
     - typed-process >= 0.2.6.0
     - process
+    - unix
 
 executables:
   tui:
