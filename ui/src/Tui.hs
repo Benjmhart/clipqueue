@@ -37,6 +37,8 @@ import           ClipQueueModule
 
 keyListenerPath = "../keyListener/index-linux"
 
+versionText = "Clipqueue 0.5.0"
+
 tui :: IO ()
 tui = do
   args <- getArgs
@@ -78,7 +80,7 @@ drawTui ts =
       ]
 
 progInfo ts = border $ vBox
-  [ str $ "Clipqueue 0.3.0"
+  [ str $ versionText
   , str $  concat ["mode: ", show $ mode ts]
   , str $ "File: " ++ savePath ts
   ]
@@ -103,14 +105,18 @@ handleTuiEvent s e = do
       EvKey KUp [] -> handleEventWith (adjustClipQueueState recedeQueue) s e
       EvKey KEnter [] -> handleEventWith (adjustClipQueueState id) s e
       _ -> continue s
-    (AppEvent (CutEvent)) -> handleEventWith getNewCut s e 
-    (AppEvent (PasteEvent)) -> handleEventWith updateQueue s e
+    (AppEvent (CutEvent)) -> handleEventWith getNewCut' s e 
+    (AppEvent (PasteEvent)) -> handleEventWith processPaste s e
     _ -> continue s
 
 handleEventWith :: (TuiState -> EventM n TuiState) -> TuiState -> BrickEvent n CustomEvent -> EventM n (Next TuiState)
 handleEventWith f s e = do
   newState <- f s 
   continue newState
+
+
+advanceState :: MonadIO m => TuiState -> m (NonEmptyCursor Text)
+advanceState = pure . advanceQueue . tuiStateQueue
 
 advanceQueue :: NonEmptyCursor Text -> NonEmptyCursor Text    
 advanceQueue nec = maybe nec id (nonEmptyCursorSelectNext nec)
@@ -126,32 +132,74 @@ adjustClipQueueState f s = do
   setClipboardFromNec newnec
   setTuiState s newnec
 
+-- TODO it feels like adjustclipqueueState and setClipboardAfter do similar things, we should see if we can streamline this
+
+-- TODO - break up libraries into process management and state management if possible
+
 setClipboardFromNec :: MonadIO m => NonEmptyCursor Text -> m ()
 setClipboardFromNec = liftIO . setClipboard . safeDecode . nonEmptyCursorCurrent
+
+processPaste :: MonadIO m => TuiState -> m TuiState
+processPaste s = case mode s of
+  Queue -> processQueuePaste s -- remove first, write file, set clipboard
+  Advance -> processAdvancePaste s -- advance, set clipboard
+  _ -> pure s
+
+processQueuePaste :: MonadIO m => TuiState -> m TuiState
+processQueuePaste = setClipBoardAfter (queuePaste)
+
+queuePaste :: MonadIO m => TuiState -> m (NonEmptyCursor Text)
+queuePaste s = do
+  newQueue <- mkCursorState . drop 1 . cursorToList $ tuiStateQueue s
+  written <- writeCursorToFile (savePath s) newQueue
+  evaluate (force written)
+  return newQueue
+
+processAdvancePaste :: MonadIO m => TuiState -> m TuiState
+processAdvancePaste = setClipBoardAfter advanceState
+
+
+setClipBoardAfter :: MonadIO m => (TuiState -> m (NonEmptyCursor Text)) ->  TuiState -> m TuiState
+setClipBoardAfter f s = do
+  newNec <- f s
+  setClipboardFromNec newNec
+  setTuiState s newNec
 
 updateQueue :: MonadIO m => TuiState -> m TuiState
 updateQueue s = do
   newQ <- getQueueFromFile s
   liftIO $ evaluate $ force newQ
-  cursorState <- mkCursorState newQ
+  cursorState <- mkCursorStateFromText newQ
   setClipboardFromNec cursorState
   setTuiState s cursorState
+
+getNewCut' :: MonadIO m => TuiState -> m TuiState
+getNewCut' s = if ((mode s) == Static) 
+    then pure s
+    else getNewCut s
+
+--TODO Normal mode set cursor to new item
 
 getNewCut :: MonadIO m => TuiState -> m TuiState
 getNewCut s = do
   newItem' <- liftIO $ T.pack <$> getClipboard
   let 
     newItem = safeEncode $ newItem'
-    path = savePath s
   if (null newItem) then return s else do
     let 
       newQueue = nonEmptyCursorAppendAtEnd newItem' (tuiStateQueue s)
-      textToWrite = T.unlines $ foldr (:) [] (rebuildNonEmptyCursor newQueue)
-    written <- liftIO $ writeFileUtf8 path textToWrite
+    written <- writeCursorToFile (savePath s) newQueue
     evaluate (force written)
-    cursorState <- mkCursorState $ textToWrite
-    setClipboardFromNec cursorState
-    setTuiState s cursorState
+    setClipboardFromNec newQueue
+    setTuiState s newQueue
+
+
+writeCursorToFile path cursor = liftIO $ writeFileUtf8 path textToWrite
+ where textToWrite = T.unlines $ cursorToList cursor
+
+
+cursorToList :: NonEmptyCursor a -> [a]
+cursorToList = foldr (:) []  . rebuildNonEmptyCursor
 
 setTuiState :: Monad m => TuiState -> NonEmptyCursor Text -> m TuiState
 setTuiState s n = return $ s { tuiStateQueue = n }

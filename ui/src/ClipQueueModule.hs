@@ -55,6 +55,8 @@ showHelpText mode = when (mode == Help) $ do
   putStrLn helpText
   die ""
 
+--TODO - describe controls in helptext
+
 helpText ::Text
 helpText = T.unlines
   [ "ClipQueue Help"
@@ -94,14 +96,17 @@ listen effect _ = do
   effect
   return Nothing
 
-mkCursorState :: Monad m => Text -> m (NonEmptyCursor Text)
-mkCursorState = map makeNonEmptyCursor . maybe (pure $ "" :| [] )  (pure) . NE.nonEmpty . lines
-  
+mkCursorStateFromText :: Monad m => Text -> m (NonEmptyCursor Text)
+mkCursorStateFromText = mkCursorState . lines
+
+mkCursorState :: Monad m => [Text] -> m (NonEmptyCursor Text)
+mkCursorState = map makeNonEmptyCursor . maybe (pure $ "" :| [] )  (pure) . NE.nonEmpty
+
 buildInitialState :: CQMode -> FilePath -> IO TuiState
 buildInitialState mode path = do
   queue <- readFileUtf8 $ path
   evaluate (force queue)
-  cursorState <- mkCursorState queue 
+  cursorState <- mkCursorStateFromText queue 
   return $ TuiState cursorState mode path
 
 data Highlight = None | Highlight
