@@ -1,7 +1,0 @@
-flags: {}
-packages:
-  - .
-extra-deps:
-  - Hclip-3.0.0.4
-
-resolver: lts-13.24
