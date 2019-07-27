@@ -31,6 +31,11 @@ import           Graphics.Vty.Attributes
 import           Graphics.Vty.Input.Events
 import           Control.DeepSeq
 import           Network.HTTP.Listen
+import           System.Process  (callCommand, getPid, interruptProcessGroupOf, spawnCommand, ProcessHandle)
+import           Control.Concurrent             ( forkIO, killThread, ThreadId )
+import           System.Directory               (getHomeDirectory)
+import           System.IO.Silently (silence)
+
 
 data CQMode = Normal | Static | Queue | Advance | Help
   deriving (Show, Read, Eq)
@@ -61,6 +66,25 @@ helpText = T.unlines
   , "a | advance - Advance Mode does not remove selections, but is similar to Queue mode in that when you paste, your selection will advance automatically"
   , "the filename argument is used to choose an alternative filepath to use for the queue.  the default is ~/queue.txt"
   ]
+
+runSilent = silence . spawnCommand
+  
+cleanupThreadsAndProcesses :: MonadIO m => [ProcessHandle] -> [ThreadId] -> m ()
+cleanupThreadsAndProcesses procs tids= do
+  liftIO $ traverse_ interruptProcessGroupOf procs
+  liftIO $ traverse_ killThread tids
+
+
+
+launchListener :: Int -> CustomEvent -> BChan CustomEvent -> IO ThreadId
+launchListener port ev
+  = forkIO . run port . listen . emit ev
+
+getModeArgs :: MonadIO m => [Text] -> m CQMode
+getModeArgs = maybe (pure Normal) (pure . parseMode) . listToMaybe
+
+getPathArgs :: MonadIO m => [Text] ->  m FilePath
+getPathArgs =  maybe (map (</> "queue.txt") (liftIO getHomeDirectory)) (pure . T.unpack) . afterHead
 
 emit :: CustomEvent -> BChan CustomEvent -> IO ()
 emit e chan = writeBChan chan $ e

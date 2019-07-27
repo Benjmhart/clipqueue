@@ -18,7 +18,7 @@ import qualified Data.List.NonEmpty            as NE
 import           Cursor.Simple.List.NonEmpty
 import           Control.Monad                  ( liftM )
 import           Control.Monad.IO.Class
-import           Control.Concurrent             ( forkIO, killThread )
+import           Control.Concurrent             ( forkIO, killThread, ThreadId )
 import           Control.DeepSeq
 import           Brick.AttrMap
 import           Brick.BChan
@@ -31,50 +31,38 @@ import           Brick.Widgets.Center
 import           Graphics.Vty
 import           Graphics.Vty.Attributes
 import           Graphics.Vty.Input.Events
-import           Network.HTTP.Listen
 import           ClipQueueModule
-import           UnliftIO.Process (spawnCommand, terminateProcess)
-import           System.IO.Silently (silence)
-import qualified System.Process.Typed as PT
-import           System.Directory               (getHomeDirectory)
-import           System.FilePath                ((</>))
-import           System.Process  (callCommand, getPid, interruptProcessGroupOf)
-import System.Posix.Signals (sigKILL, signalProcess)
 
--- TODO: use getExecutablePath from System.environment to run the keylistener
+-- TODO: use getExecutablePath from System.environment to run the keylistener or https://hackage.haskell.org/package/executable-path
 
 keyListenerPath = "../keyListener/index-linux"
-
 
 tui :: IO ()
 tui = do
   args <- getArgs
-  mode <- maybe (pure Normal) (pure . parseMode) (listToMaybe args) 
-  savePath <- maybe (map (</> "queue.txt") getHomeDirectory) (pure . T.unpack) (afterHead args)
+  mode <- getModeArgs args
+  savePath <- getPathArgs args
   showHelpText mode
-  keyListenerProc <- silence $ spawnCommand (keyListenerPath) 
   initialState <- buildInitialState mode savePath
   eventChan    <- newBChan 10
-  cutThread <- forkIO $ run 55999 $ listen $ emit CutEvent eventChan
-  pasteThread <- forkIO $ run 55998 $ listen $ emit PasteEvent eventChan
-  let 
-    buildVty = mkVty defaultConfig
-  initialVty <- buildVty
-  forkIO $ run 55999 $ listen $ emit CutEvent eventChan
-  forkIO $ run 55998 $ listen $ emit PasteEvent eventChan
-  endState <- customMain initialVty
-                         buildVty
-                         (Just eventChan)
-                         tuiApp
-                         initialState
-  interruptProcessGroupOf keyListenerProc
-  killThread cutThread
-  killThread pasteThread
+  keyListenerProc <- runSilent (keyListenerPath) 
+  cutThread <- launchListener 55999 CutEvent eventChan
+  pasteThread <- launchListener 55998 PasteEvent eventChan
+  endState <- launchCustomBrick initialState eventChan
+  cleanupThreadsAndProcesses [keyListenerProc] [cutThread, pasteThread]
   return ()
 
-type ResourceName = Text
+launchCustomBrick :: MonadIO m => TuiState -> BChan CustomEvent -> m TuiState
+launchCustomBrick initialState eventChan = do
+  let buildVty = mkVty defaultConfig
+  initialVty <- liftIO buildVty
+  liftIO $ customMain initialVty
+          buildVty
+          (Just eventChan)
+          tuiApp
+          initialState
 
-tuiApp :: App TuiState CustomEvent ResourceName
+tuiApp :: App TuiState CustomEvent Text
 tuiApp = App { appDraw         = drawTui
              , appChooseCursor = showFirstCursor
              , appHandleEvent  = handleTuiEvent
@@ -82,7 +70,7 @@ tuiApp = App { appDraw         = drawTui
              , appAttrMap      = const $ attrMap mempty [("selected", fg red)]
              }
 
-drawTui :: TuiState -> [Widget ResourceName]
+drawTui :: TuiState -> [Widget Text]
 drawTui ts =
   let nec = tuiStateQueue ts
   in  [ progInfo ts
