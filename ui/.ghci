@@ -1,3 +1,4 @@
-:set -fwarn-unused-binds -fwarn-unused-imports -fwarn-orphans
+:set -fwarn-unused-binds -fwarn-unused-imports -fwarn- duplicate-imports -fwarn-unused-modules -fwarn-orphans
 :set -isrc
+:set -interactive-print
 :load Main
