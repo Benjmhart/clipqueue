@@ -11,8 +11,6 @@ six
 
 -- Build mode
 new cuts add to the back only, selection does not change
-new pastes do nothing
-
 
 -- Test Static mode
 new cuts do nothing
@@ -26,11 +24,9 @@ new pastes delete the head and set clipboard to new head
 new cuts to the back
 new pastes advance the queue without changing it
 
-One TwoThreeFourFiveFiveFive
-
 --
 
-test path behavior 
+test path behavior
 
 run executable from anywhere - default path should always be ~/queue.txt
 
