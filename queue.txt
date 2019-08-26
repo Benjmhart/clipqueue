@@ -1,0 +1,6 @@
+emit :: CustomEvent -> BChan CustomEvent -> IO ()Ωemit e chan = writeBChan chan $ eΩΩlisten :: IO () -> Listener B.ByteString IOΩlisten effect _ = doΩ  effectΩ  return Nothing
+emit :: CustomEvent -> BChan CustomEvent -> IO ()Ωemit e chan = writeBChan chan $ eΩΩlisten :: IO () -> Listener B.ByteString IOΩlisten effect _ = doΩ  effectΩ  return Nothing
+Ω  run 88999 $ listen (emit CutEvent eventChan)Ω  run 88998 $ listen (emit PasteEvent eventChan)
+Ω  run 88999 $ listen (emit CutEvent eventChan)Ω  run 88998 $ listen (emit PasteEvent eventChan)
+Ω  run 88999 $ listen (emit CutEvent eventChan)Ω  run 88998 $ listen (emit PasteEvent eventChan)
+ to store application-
